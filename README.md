@@ -1,59 +1,111 @@
 # sbt-antlr4
 
-[![Build Status](https://github.com/ihji/sbt-antlr4/actions/workflows/scala.yml/badge.svg)](https://github.com/ihji/sbt-antlr4/actions/workflows/scala.yml)
+SBT plugin for ANTLR4 code generation.
 
-This plugin provides an ability to run antlr4 when compiling in sbt 1.1.x and 0.13.x.
+Resolves the ANTLR4 tool jar via Coursier by default.
+For vendored or non-Maven environments, provide jars manually.
 
-## How to use
+## Setup
 
-Put your .g4 files in `src/main/antlr4` directory and make `project/sbt-antlr4.sbt`
-file with the following contents:
+`project/plugins.sbt`:
 
-    // sbt 1.1.x
-    addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.3")
+```scala
+addSbtPlugin("ai.hearn" % "sbt-antlr4" % "0.1.0")
+```
 
-    // sbt 0.13.x
-    addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.7.13")
+`build.sbt`:
 
-And, enable the plugin in your `build.sbt` file.
+```scala
+enablePlugins(Antlr4Plugin)
+```
 
-    // sbt 1.1.x
-    enablePlugins(Antlr4Plugin)
-
-    // sbt 0.13.x
-    antlr4Settings
-
-Now, whenever you invoke `sbt compile` the ANTLR artifacts will be written to
-`./target/scala-XX.YY/sources_managed/main/antlr4` (depending on your Scala version).
+Place `.g4` grammars in `src/main/antlr4/`. Run `sbt compile`.
 
 ## Settings
 
-You can select an antl4 version with:
+All scoped under `Antlr4`:
 
-    antlr4Version in Antlr4 := "4.8-1" // default: 4.8-1
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `antlr4Version` | `String` | `"4.13.2"` | Auto-resolved version |
+| `antlr4ToolClasspath` | `Seq[File]` | `Seq.empty` | Manual jars — disables all auto-resolution when non-empty |
+| `antlr4Source` | `File` | `src/main/antlr4` | Grammar directory |
+| `antlr4Output` | `File` | `src_managed/main/antlr4` | Generated source output |
+| `antlr4Package` | `Option[String]` | `None` | Package for generated code |
+| `antlr4Listener` | `Boolean` | `true` | Generate listener |
+| `antlr4Visitor` | `Boolean` | `false` | Generate visitor |
+| `antlr4Language` | `Option[String]` | `None` | Target language (`Java`, `Python3`, `Go`, etc.) |
+| `antlr4Library` | `Option[File]` | `None` | Directory for imported grammars / `.tokens` |
+| `antlr4FatalWarnings` | `Boolean` | `false` | Treat warnings as errors |
+| `antlr4Options` | `Map[String, String]` | `Map.empty` | `-D<key>=<value>` overrides |
+| `antlr4ExtraArgs` | `Seq[String]` | `Seq.empty` | Raw CLI args escape hatch |
 
-`-package` option can be defined by the following setting:
+## Examples
 
-    antlr4PackageName in Antlr4 := Some("com.simplytyped")
+```scala
+enablePlugins(Antlr4Plugin)
+Antlr4 / antlr4Package := Some("com.example.parser")
+Antlr4 / antlr4Visitor := true
+```
 
-You can also adjust `-listener`, `-no-listener`, `-visitor`, `-no-visitor`, `-Werror` options:
+Pin a specific version:
 
-    antlr4GenListener in Antlr4 := true // default: true
+```scala
+Antlr4 / antlr4Version := "4.12.0"
+```
 
-    antlr4GenVisitor in Antlr4 := false // default: false
+Manual classpath (disables Coursier and runtime auto-add):
 
-    antlr4TreatWarningsAsErrors in Antlr4 := true // default: false
- 
+```scala
+Antlr4 / antlr4ToolClasspath := (file("/opt/antlr/lib") ** "*.jar").get
+```
+
+Grammar imports:
+
+```scala
+Antlr4 / antlr4Library := Some(baseDirectory.value / "src" / "main" / "antlr4" / "imports")
+```
+
+Extra flags:
+
+```scala
+Antlr4 / antlr4ExtraArgs := Seq("-encoding", "UTF-8", "-atn")
+```
+
+## Multi-module project
+
+```scala
+lazy val parser = (project in file("modules/parser"))
+  .enablePlugins(Antlr4Plugin)
+  .settings(
+    Antlr4 / antlr4Package := Some("com.example.parser"),
+    Antlr4 / antlr4Visitor := true,
+  )
+
+lazy val core = (project in file("modules/core"))
+  .dependsOn(parser)
+```
+
+## Migrating from `com.simplytyped` 0.8.x
+
+| Old | New |
+|-----|-----|
+| `addSbtPlugin("com.simplytyped" ...)` | `addSbtPlugin("ai.hearn" ...)` |
+| `antlr4Version in Antlr4` | `Antlr4 / antlr4Version` |
+| `antlr4PackageName in Antlr4` | `Antlr4 / antlr4Package` |
+| `antlr4GenListener in Antlr4` | `Antlr4 / antlr4Listener` |
+| `antlr4GenVisitor in Antlr4` | `Antlr4 / antlr4Visitor` |
+| `antlr4TreatWarningsAsErrors in Antlr4` | `Antlr4 / antlr4FatalWarnings` |
+| `Antlr4 / sourceDirectory` | `Antlr4 / antlr4Source` |
+| `Antlr4 / javaSource` | `Antlr4 / antlr4Output` |
+| `antlr4RuntimeDependency` | Removed — auto-added when using Coursier |
+| `antlr4Dependency` | Removed — handled by `antlr4Version` |
+
+Key differences:
+- ANTLR tool jars and `antlr4-runtime` resolve automatically via Coursier.
+- Setting `antlr4ToolClasspath` disables all auto-resolution (enterprise/vendored environments manage deps externally).
+- `-Xexact-output-dir` is always on.
+
 ## License
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+Apache License 2.0.
