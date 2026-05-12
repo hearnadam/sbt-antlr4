@@ -1,111 +1,151 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * License); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an AS IS BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Licensed under the Apache License, Version 2.0.
+ * See: http://www.apache.org/licenses/LICENSE-2.0
  */
 
 package com.simplytyped
 
 import sbt._
-import Keys._
-
-import sbt.internal.io.Source
+import sbt.Keys._
 import scala.sys.process.Process
 
 object Antlr4Plugin extends AutoPlugin {
   object autoImport {
     val Antlr4 = config("antlr4")
-    val antlr4Version = settingKey[String]("Version of antlr4")
-    val antlr4Generate = taskKey[Seq[File]]("Generate classes from antlr4 grammars")
-    val antlr4RuntimeDependency = settingKey[ModuleID]("Library dependency for antlr4 runtime")
-    val antlr4Dependency = settingKey[ModuleID]("Build dependency required for parsing grammars")
-    val antlr4PackageName = settingKey[Option[String]]("Name of the package for generated classes")
-    val antlr4GenListener = settingKey[Boolean]("Generate listener")
-    val antlr4GenVisitor = settingKey[Boolean]("Generate visitor")
-    val antlr4TreatWarningsAsErrors = settingKey[Boolean]("Treat warnings as errors when generating parser")
+    val antlr4Generate = taskKey[Seq[File]]("Generate sources from ANTLR4 grammars")
+    val antlr4Version = settingKey[String]("ANTLR4 version to auto-resolve")
+    val antlr4ToolClasspath = settingKey[Seq[File]]("ANTLR4 tool jars — when non-empty, skips Coursier and runtime auto-add")
+    val antlr4Source = settingKey[File]("Directory containing .g4 grammar files")
+    val antlr4Output = settingKey[File]("Output directory for generated sources")
+    val antlr4Package = settingKey[Option[String]]("Package/namespace for generated code")
+    val antlr4Listener = settingKey[Boolean]("Generate parse tree listener")
+    val antlr4Visitor = settingKey[Boolean]("Generate parse tree visitor")
+    val antlr4Language = settingKey[Option[String]]("Target language (Java, CSharp, Python3, Go, Cpp, etc.)")
+    val antlr4Library = settingKey[Option[File]]("Directory for imported grammars and .tokens files")
+    val antlr4FatalWarnings = settingKey[Boolean]("Treat warnings as errors")
+    val antlr4Options = settingKey[Map[String, String]]("Grammar-level -D<key>=<value> overrides")
+    val antlr4ExtraArgs = settingKey[Seq[String]]("Additional raw CLI arguments passed to the ANTLR4 tool")
   }
   import autoImport._
 
-  private val antlr4BuildDependency = settingKey[ModuleID]("Build dependency required for parsing grammars, scoped to plugin")
+  override def trigger = noTrigger
+  override def requires = plugins.JvmPlugin
 
-  def antlr4GeneratorTask : Def.Initialize[Task[Seq[File]]] = Def.task {
-    val targetBaseDir = (Antlr4 / javaSource).value
-    val classpath = (Antlr4 / managedClasspath).value.files
+  private def generateTask: Def.Initialize[Task[Seq[File]]] = Def.task {
+    val explicit = (Antlr4 / antlr4ToolClasspath).value
+    val managed = (Antlr4 / managedClasspath).value.files
+    val cp = if (explicit.nonEmpty) explicit else managed
+    val outputDir = (Antlr4 / antlr4Output).value
+    val sourceDir = (Antlr4 / antlr4Source).value
+    val pkg = (Antlr4 / antlr4Package).value
+    val listener = (Antlr4 / antlr4Listener).value
+    val visitor = (Antlr4 / antlr4Visitor).value
+    val language = (Antlr4 / antlr4Language).value
+    val libDir = (Antlr4 / antlr4Library).value
+    val options = (Antlr4 / antlr4Options).value
+    val werror = (Antlr4 / antlr4FatalWarnings).value
+    val extra = (Antlr4 / antlr4ExtraArgs).value
     val log = streams.value.log
-    val packageName = (Antlr4 / antlr4PackageName).value
-    val listenerOpt = (Antlr4 / antlr4GenListener).value
-    val visitorOpt = (Antlr4 / antlr4GenVisitor).value
-    val warningsAsErrorOpt = (Antlr4 / antlr4TreatWarningsAsErrors).value
-    val cachedCompile = FileFunction.cached(streams.value.cacheDirectory / "antlr4", FilesInfo.lastModified, FilesInfo.exists) {
-      in : Set[File] =>
-        runAntlr(
-          srcFiles = in,
-          targetBaseDir = targetBaseDir,
-          classpath = classpath,
-          log = log,
-          packageName = packageName,
-          listenerOpt = listenerOpt,
-          visitorOpt = visitorOpt,
-          warningsAsErrorOpt = warningsAsErrorOpt
-        )
+    val cacheDir = streams.value.cacheDirectory / "antlr4"
+
+    if (cp.isEmpty) {
+      sys.error(
+        "ANTLR4 tool classpath is empty. Either:\n" +
+        "  1. Set `Antlr4 / antlr4Version` to auto-resolve (e.g. \"4.13.2\"), or\n" +
+        "  2. Override `Antlr4 / antlr4ToolClasspath` to provide jars manually."
+      )
     }
-    cachedCompile(((Antlr4 / sourceDirectory).value ** "*.g4").get.toSet).toSeq
+
+    val grammars = (sourceDir ** "*.g4").get.toSet
+    if (grammars.isEmpty) {
+      log.debug(s"No .g4 files in $sourceDir — skipping ANTLR4 generation")
+      Seq.empty
+    } else {
+      val cachedFn = FileFunction.cached(cacheDir) { (_: Set[File]) =>
+        outputDir.mkdirs()
+        val exitCode = runAntlr(
+          classpath = cp,
+          srcFiles = grammars,
+          outputDir = outputDir,
+          packageName = pkg,
+          listener = listener,
+          visitor = visitor,
+          language = language,
+          libDir = libDir,
+          options = options,
+          werror = werror,
+          extra = extra,
+          log = log
+        )
+        if (exitCode != 0) sys.error(s"ANTLR4 code generation failed (exit code $exitCode)")
+        (outputDir ** ("*.java" | "*.cs" | "*.py" | "*.js" | "*.ts" | "*.go" | "*.cpp" | "*.h" | "*.swift" | "*.dart")).get.toSet
+      }
+      cachedFn(grammars).toSeq
+    }
   }
 
-  def runAntlr(
-      srcFiles: Set[File],
-      targetBaseDir: File,
+  private def runAntlr(
       classpath: Seq[File],
-      log: Logger,
+      srcFiles: Set[File],
+      outputDir: File,
       packageName: Option[String],
-      listenerOpt: Boolean,
-      visitorOpt: Boolean,
-      warningsAsErrorOpt: Boolean) = {
-    val targetDir = packageName.map{_.split('.').foldLeft(targetBaseDir){_/_}}.getOrElse(targetBaseDir)
-    val baseArgs = Seq("-cp", Path.makeString(classpath), "org.antlr.v4.Tool", "-o", targetDir.toString)
-    val packageArgs = packageName.toSeq.flatMap{p => Seq("-package",p)}
-    val listenerArgs = if(listenerOpt) Seq("-listener") else Seq("-no-listener")
-    val visitorArgs = if(visitorOpt) Seq("-visitor") else Seq("-no-visitor")
-    val warningAsErrorArgs = if (warningsAsErrorOpt) Seq("-Werror") else Seq.empty
-    val sourceArgs = srcFiles.map{_.toString}
-    val args = baseArgs ++ packageArgs ++ listenerArgs ++ visitorArgs ++ warningAsErrorArgs ++ sourceArgs
-    val exitCode = Process("java", args) ! log
-    if(exitCode != 0) sys.error(s"Antlr4 failed with exit code $exitCode")
-    (targetDir ** "*.java").get.toSet
+      listener: Boolean,
+      visitor: Boolean,
+      language: Option[String],
+      libDir: Option[File],
+      options: Map[String, String],
+      werror: Boolean,
+      extra: Seq[String],
+      log: Logger
+  ): Int = {
+    val cpStr = classpath.map(_.getPath).mkString(java.io.File.pathSeparator)
+    val args = Vector.newBuilder[String]
+    args += "-cp" += cpStr += "org.antlr.v4.Tool"
+    args += "-o" += outputDir.getPath
+    args += "-Xexact-output-dir"
+    packageName.foreach { p => args += "-package" += p }
+    libDir.foreach { d => args += "-lib" += d.getPath }
+    language.foreach { lang => args += s"-Dlanguage=$lang" }
+    options.foreach { case (k, v) => args += s"-D$k=$v" }
+    args += (if (listener) "-listener" else "-no-listener")
+    args += (if (visitor) "-visitor" else "-no-visitor")
+    if (werror) args += "-Werror"
+    extra.foreach(a => args += a)
+    srcFiles.foreach(f => args += f.getPath)
+
+    val cmd = args.result()
+    log.info(s"ANTLR4: java ${cmd.mkString(" ")}")
+    Process("java", cmd) ! log
   }
 
-  override def projectSettings = inConfig(Antlr4)(Seq(
-    sourceDirectory := (Compile / sourceDirectory).value / "antlr4",
-    javaSource := (Compile / sourceManaged).value / "antlr4",
+  override def projectSettings: Seq[Setting[_]] = inConfig(Antlr4)(Seq(
+    antlr4Version := "4.13.2",
+    antlr4ToolClasspath := Seq.empty,
+    antlr4Source := (Compile / sourceDirectory).value / "antlr4",
+    antlr4Output := (Compile / sourceManaged).value / "antlr4",
+    antlr4Package := None,
+    antlr4Listener := true,
+    antlr4Visitor := false,
+    antlr4Language := None,
+    antlr4Library := None,
+    antlr4FatalWarnings := false,
+    antlr4Options := Map.empty,
+    antlr4ExtraArgs := Seq.empty,
     managedClasspath := Classpaths.managedJars(configuration.value, classpathTypes.value, update.value),
-    antlr4Version := "4.8-1",
-    antlr4Generate := antlr4GeneratorTask.value,
-    antlr4Dependency := "org.antlr" % "antlr4" % antlr4Version.value,
-    antlr4RuntimeDependency := "org.antlr" % "antlr4-runtime" % antlr4Version.value,
-    antlr4BuildDependency := antlr4Dependency.value % Antlr4.name,
-    antlr4PackageName := None,
-    antlr4GenListener := true,
-    antlr4GenVisitor := false,
-    antlr4TreatWarningsAsErrors := false
+    antlr4Generate := generateTask.value
   )) ++ Seq(
     ivyConfigurations += Antlr4,
-    Compile / managedSourceDirectories += (Antlr4 / javaSource).value,
+    libraryDependencies ++= {
+      if ((Antlr4 / antlr4ToolClasspath).value.isEmpty) {
+        val ver = (Antlr4 / antlr4Version).value
+        Seq(
+          "org.antlr" % "antlr4" % ver % Antlr4,
+          "org.antlr" % "antlr4-runtime" % ver
+        )
+      } else Seq.empty
+    },
+    Compile / managedSourceDirectories += (Antlr4 / antlr4Output).value,
     Compile / sourceGenerators += (Antlr4 / antlr4Generate).taskValue,
-    watchSources += new Source(sourceDirectory.value, "*.g4", HiddenFileFilter),
-    cleanFiles += (Antlr4 / javaSource).value,
-    libraryDependencies += (Antlr4 / antlr4BuildDependency).value,
-    libraryDependencies += (Antlr4 / antlr4RuntimeDependency).value
+    cleanFiles += (Antlr4 / antlr4Output).value
   )
 }
