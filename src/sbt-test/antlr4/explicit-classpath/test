@@ -1,4 +1,4 @@
-# Generate sources, compile, and run — exercises the full plugin pipeline.
+# Exercises antlr4ToolClasspath override (skips auto-resolution).
 > Antlr4 / antlr4Generate
 $ exists target/scala-3.8.3/src_managed/main/antlr4/ExprParser.java
 $ exists target/scala-3.8.3/src_managed/main/antlr4/ExprLexer.java
