@@ -27,8 +27,8 @@ All scoped under `Antlr4`:
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `antlr4Version` | `String` | `"4.13.2"` | Auto-resolved version |
-| `antlr4ToolClasspath` | `Seq[File]` | `Seq.empty` | Manual jars — disables all auto-resolution when non-empty |
+| `antlr4Version` | `Option[String]` | `Some("4.13.2")` | Auto-resolved version; `None` disables auto-resolution |
+| `antlr4ToolClasspath` | `Seq[File]` | `Seq.empty` | Manual jars used instead of the auto-resolved tool classpath when non-empty |
 | `antlr4Source` | `File` | `src/main/antlr4` | Grammar directory |
 | `antlr4Output` | `File` | `src_managed/main/antlr4` | Generated source output |
 | `antlr4Package` | `Option[String]` | `None` | Package for generated code |
@@ -51,12 +51,13 @@ Antlr4 / antlr4Visitor := true
 Pin a specific version:
 
 ```scala
-Antlr4 / antlr4Version := "4.12.0"
+Antlr4 / antlr4Version := Some("4.12.0")
 ```
 
 Manual classpath (disables Coursier and runtime auto-add):
 
 ```scala
+Antlr4 / antlr4Version := None
 Antlr4 / antlr4ToolClasspath := (file("/opt/antlr/lib") ** "*.jar").get
 ```
 
@@ -103,7 +104,7 @@ lazy val core = (project in file("modules/core"))
 
 Key differences:
 - ANTLR tool jars and `antlr4-runtime` resolve automatically via Coursier.
-- Setting `antlr4ToolClasspath` disables all auto-resolution (enterprise/vendored environments manage deps externally).
+- Setting `antlr4Version := None` disables all auto-resolution (enterprise/vendored environments manage deps externally).
 - `-Xexact-output-dir` is always on.
 
 ## License

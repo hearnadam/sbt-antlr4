@@ -13,8 +13,8 @@ object Antlr4Plugin extends AutoPlugin {
   object autoImport {
     val Antlr4 = config("antlr4")
     val antlr4Generate = taskKey[Seq[File]]("Generate sources from ANTLR4 grammars")
-    val antlr4Version = settingKey[String]("ANTLR4 version to auto-resolve")
-    val antlr4ToolClasspath = settingKey[Seq[File]]("ANTLR4 tool jars — when non-empty, skips Coursier and runtime auto-add")
+    val antlr4Version = settingKey[Option[String]]("ANTLR4 version to auto-resolve; None disables auto-resolution")
+    val antlr4ToolClasspath = taskKey[Seq[File]]("ANTLR4 tool jars — when non-empty, overrides the auto-resolved classpath")
     val antlr4Source = settingKey[File]("Directory containing .g4 grammar files")
     val antlr4Output = settingKey[File]("Output directory for generated sources")
     val antlr4Package = settingKey[Option[String]]("Package/namespace for generated code")
@@ -31,10 +31,14 @@ object Antlr4Plugin extends AutoPlugin {
   override def trigger = noTrigger
   override def requires = plugins.JvmPlugin
 
-  private def generateTask: Def.Initialize[Task[Seq[File]]] = Def.task {
+  private def toolClasspathTask: Def.Initialize[Task[Seq[File]]] = Def.taskDyn {
     val explicit = (Antlr4 / antlr4ToolClasspath).value
-    val managed = (Antlr4 / managedClasspath).value.files
-    val cp = if (explicit.nonEmpty) explicit else managed
+    if (explicit.nonEmpty) Def.task(explicit)
+    else Def.task((Antlr4 / managedClasspath).value.files)
+  }
+
+  private def generateTask: Def.Initialize[Task[Seq[File]]] = Def.task {
+    val cp = toolClasspathTask.value
     val outputDir = (Antlr4 / antlr4Output).value
     val sourceDir = (Antlr4 / antlr4Source).value
     val pkg = (Antlr4 / antlr4Package).value
@@ -50,9 +54,8 @@ object Antlr4Plugin extends AutoPlugin {
 
     if (cp.isEmpty) {
       sys.error(
-        "ANTLR4 tool classpath is empty. Either:\n" +
-        "  1. Set `Antlr4 / antlr4Version` to auto-resolve (e.g. \"4.13.2\"), or\n" +
-        "  2. Override `Antlr4 / antlr4ToolClasspath` to provide jars manually."
+        "ANTLR4 tool classpath is empty. Either set `Antlr4 / antlr4Version` " +
+        "to Some(version) for auto-resolution, or override `Antlr4 / antlr4ToolClasspath` with jars."
       )
     }
 
@@ -119,7 +122,7 @@ object Antlr4Plugin extends AutoPlugin {
   }
 
   override def projectSettings: Seq[Setting[_]] = inConfig(Antlr4)(Seq(
-    antlr4Version := "4.13.2",
+    antlr4Version := Some("4.13.2"),
     antlr4ToolClasspath := Seq.empty,
     antlr4Source := (Compile / sourceDirectory).value / "antlr4",
     antlr4Output := (Compile / sourceManaged).value / "antlr4",
@@ -136,13 +139,12 @@ object Antlr4Plugin extends AutoPlugin {
   )) ++ Seq(
     ivyConfigurations += Antlr4,
     libraryDependencies ++= {
-      if ((Antlr4 / antlr4ToolClasspath).value.isEmpty) {
-        val ver = (Antlr4 / antlr4Version).value
+      (Antlr4 / antlr4Version).value.toSeq.flatMap { ver =>
         Seq(
           "org.antlr" % "antlr4" % ver % Antlr4,
           "org.antlr" % "antlr4-runtime" % ver
         )
-      } else Seq.empty
+      }
     },
     Compile / managedSourceDirectories += (Antlr4 / antlr4Output).value,
     Compile / sourceGenerators += (Antlr4 / antlr4Generate).taskValue,
