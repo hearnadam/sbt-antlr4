@@ -3,7 +3,7 @@
  * See: http://www.apache.org/licenses/LICENSE-2.0
  */
 
-package com.simplytyped
+package ai.hearn
 
 import sbt._
 import sbt.Keys._

@@ -22,4 +22,9 @@ lazy val root = (project in file("."))
   .enablePlugins(SbtPlugin)
   .settings(
     name := "sbt-antlr4",
+    scriptedLaunchOpts ++= Seq(
+      "-Xmx1024M",
+      s"-Dplugin.version=${version.value}"
+    ),
+    scriptedBufferLog := false
   )

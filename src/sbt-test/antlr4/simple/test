@@ -1,0 +1,6 @@
+# Generate sources, compile, and run — exercises the full plugin pipeline.
+> Antlr4 / antlr4Generate
+$ exists target/scala-3.8.3/src_managed/main/antlr4/HelloParser.java
+$ exists target/scala-3.8.3/src_managed/main/antlr4/HelloLexer.java
+> compile
+> run
