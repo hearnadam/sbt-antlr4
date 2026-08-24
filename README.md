@@ -4,13 +4,14 @@ SBT plugin for ANTLR4 code generation.
 
 Resolves the ANTLR4 tool jar via Coursier by default.
 For vendored or non-Maven environments, provide jars manually.
+Supports sbt 1.9+ and sbt 2.x.
 
 ## Setup
 
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("ai.hearn" % "sbt-antlr4" % "0.1.0")
+addSbtPlugin("ai.hearn" % "sbt-antlr4" % "0.2.0")
 ```
 
 `build.sbt`:

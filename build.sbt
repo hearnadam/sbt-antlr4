@@ -1,5 +1,7 @@
 ThisBuild / organization := "ai.hearn"
 ThisBuild / versionScheme := Some("early-semver")
+ThisBuild / scalaVersion := "3.8.4"
+ThisBuild / crossScalaVersions := Seq("3.8.4", "2.12.21")
 ThisBuild / publishTo := {
   if (isSnapshot.value)
     Some("central-snapshots" at "https://central.sonatype.com/repository/maven-snapshots/")
@@ -22,6 +24,13 @@ lazy val root = (project in file("."))
   .enablePlugins(SbtPlugin)
   .settings(
     name := "sbt-antlr4",
+    (pluginCrossBuild / sbtVersion) := {
+      scalaBinaryVersion.value match {
+        case "2.12" => "1.13.0"
+        case _      => "2.0.7"
+      }
+    },
+    addSbtPlugin("com.github.sbt" % "sbt2-compat" % "0.2.0"),
     scriptedLaunchOpts ++= Seq(
       "-Xmx1024M",
       s"-Dplugin.version=${version.value}"

@@ -1,19 +1,17 @@
-/*
- * Licensed under the Apache License, Version 2.0.
- * See: http://www.apache.org/licenses/LICENSE-2.0
- */
-
 package ai.hearn
 
 import sbt._
 import sbt.Keys._
+import sbtcompat.PluginCompat.{DefOps, toFiles}
 import scala.sys.process.Process
 
 object Antlr4Plugin extends AutoPlugin {
   object autoImport {
     val Antlr4 = config("antlr4")
+    @transient
     val antlr4Generate = taskKey[Seq[File]]("Generate sources from ANTLR4 grammars")
     val antlr4Version = settingKey[Option[String]]("ANTLR4 version to auto-resolve; None disables auto-resolution")
+    @transient
     val antlr4ToolClasspath = taskKey[Seq[File]]("ANTLR4 tool jars — when non-empty, overrides the auto-resolved classpath")
     val antlr4Source = settingKey[File]("Directory containing .g4 grammar files")
     val antlr4Output = settingKey[File]("Output directory for generated sources")
@@ -34,7 +32,10 @@ object Antlr4Plugin extends AutoPlugin {
   private def toolClasspathTask: Def.Initialize[Task[Seq[File]]] = Def.taskDyn {
     val explicit = (Antlr4 / antlr4ToolClasspath).value
     if (explicit.nonEmpty) Def.task(explicit)
-    else Def.task((Antlr4 / managedClasspath).value.files)
+    else Def.task {
+      implicit val converter: xsbti.FileConverter = fileConverter.value
+      toFiles((Antlr4 / managedClasspath).value)
+    }
   }
 
   private def generateTask: Def.Initialize[Task[Seq[File]]] = Def.task {
@@ -59,7 +60,7 @@ object Antlr4Plugin extends AutoPlugin {
       )
     }
 
-    val grammars = (sourceDir ** "*.g4").get.toSet
+    val grammars = (sourceDir ** "*.g4").get().toSet
     if (grammars.isEmpty) {
       log.debug(s"No .g4 files in $sourceDir — skipping ANTLR4 generation")
       Seq.empty
@@ -81,7 +82,7 @@ object Antlr4Plugin extends AutoPlugin {
           log = log
         )
         if (exitCode != 0) sys.error(s"ANTLR4 code generation failed (exit code $exitCode)")
-        (outputDir ** ("*.java" | "*.cs" | "*.py" | "*.js" | "*.ts" | "*.go" | "*.cpp" | "*.h" | "*.swift" | "*.dart")).get.toSet
+        (outputDir ** ("*.java" | "*.cs" | "*.py" | "*.js" | "*.ts" | "*.go" | "*.cpp" | "*.h" | "*.swift" | "*.dart")).get().toSet
       }
       cachedFn(grammars).toSeq
     }
@@ -134,7 +135,14 @@ object Antlr4Plugin extends AutoPlugin {
     antlr4FatalWarnings := false,
     antlr4Options := Map.empty,
     antlr4ExtraArgs := Seq.empty,
-    managedClasspath := Classpaths.managedJars(configuration.value, classpathTypes.value, update.value),
+    managedClasspath := Def.uncached {
+      Antlr4Compat.managedJars(
+        configuration.value,
+        classpathTypes.value,
+        update.value,
+        fileConverter.value
+      )
+    },
     antlr4Generate := generateTask.value
   )) ++ Seq(
     ivyConfigurations += Antlr4,

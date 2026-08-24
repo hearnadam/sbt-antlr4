@@ -17,6 +17,6 @@ jobs:
           distribution: "corretto"
       - uses: sbt/setup-sbt@v1
       - name: Compile
-        run: sbt compile
+        run: sbt +compile
       - name: Scripted tests
-        run: sbt scripted
+        run: sbt +scripted

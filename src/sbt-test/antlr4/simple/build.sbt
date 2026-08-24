@@ -3,6 +3,7 @@ enablePlugins(Antlr4Plugin)
 scalaVersion := "3.8.3"
 
 Antlr4 / antlr4Version := Some("4.13.2")
+Antlr4 / antlr4Output := baseDirectory.value / "target" / "antlr4-generated"
 Antlr4 / antlr4Package := Some("example.expr")
 Antlr4 / antlr4Listener := true
 Antlr4 / antlr4Visitor := true
