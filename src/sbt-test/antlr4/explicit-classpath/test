@@ -1,6 +1,6 @@
 # Exercises antlr4ToolClasspath override (skips auto-resolution).
 > Antlr4 / antlr4Generate
-$ exists target/scala-3.8.3/src_managed/main/antlr4/ExprParser.java
-$ exists target/scala-3.8.3/src_managed/main/antlr4/ExprLexer.java
+$ exists target/antlr4-generated/ExprParser.java
+$ exists target/antlr4-generated/ExprLexer.java
 > compile
 > run
