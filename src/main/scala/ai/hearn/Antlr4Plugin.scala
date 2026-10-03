@@ -23,6 +23,7 @@ object Antlr4Plugin extends AutoPlugin {
     val antlr4FatalWarnings = settingKey[Boolean]("Treat warnings as errors")
     val antlr4Options = settingKey[Map[String, String]]("Grammar-level -D<key>=<value> overrides")
     val antlr4ExtraArgs = settingKey[Seq[String]]("Additional raw CLI arguments passed to the ANTLR4 tool")
+    val antlr4PackageOutput = settingKey[Boolean]("Place generated sources below antlr4Output according to antlr4Package")
   }
   import autoImport._
 
@@ -52,6 +53,14 @@ object Antlr4Plugin extends AutoPlugin {
     val extra = (Antlr4 / antlr4ExtraArgs).value
     val log = streams.value.log
     val cacheDir = streams.value.cacheDirectory / "antlr4"
+    val packageOutput = (Antlr4 / antlr4PackageOutput).value
+
+    val antlrOutputDir = if (packageOutput)
+      pkg.fold(outputDir) { p =>
+        p.split('.').foldLeft(outputDir)(_ / _)
+      }
+    else
+      outputDir
 
     if (cp.isEmpty) {
       sys.error(
@@ -66,11 +75,11 @@ object Antlr4Plugin extends AutoPlugin {
       Seq.empty
     } else {
       val cachedFn = FileFunction.cached(cacheDir) { (_: Set[File]) =>
-        outputDir.mkdirs()
+        antlrOutputDir.mkdirs()
         val exitCode = runAntlr(
           classpath = cp,
           srcFiles = grammars,
-          outputDir = outputDir,
+          outputDir = antlrOutputDir,
           packageName = pkg,
           listener = listener,
           visitor = visitor,
@@ -133,6 +142,7 @@ object Antlr4Plugin extends AutoPlugin {
     antlr4Language := None,
     antlr4Library := None,
     antlr4FatalWarnings := false,
+    antlr4PackageOutput := false,
     antlr4Options := Map.empty,
     antlr4ExtraArgs := Seq.empty,
     managedClasspath := Def.uncached {

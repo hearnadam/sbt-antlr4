@@ -33,6 +33,7 @@ All scoped under `Antlr4`:
 | `antlr4Source` | `File` | `src/main/antlr4` | Grammar directory |
 | `antlr4Output` | `File` | `src_managed/main/antlr4` | Generated source output |
 | `antlr4Package` | `Option[String]` | `None` | Package for generated code |
+| `antlr4PackageOutput` | `Boolean` | `false` | If activated, files are generated into folder structure according to `antlr4Package` (instead of `antlr4Output` directly). |
 | `antlr4Listener` | `Boolean` | `true` | Generate listener |
 | `antlr4Visitor` | `Boolean` | `false` | Generate visitor |
 | `antlr4Language` | `Option[String]` | `None` | Target language (`Java`, `Python3`, `Go`, etc.) |
