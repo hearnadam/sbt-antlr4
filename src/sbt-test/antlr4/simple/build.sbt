@@ -1,6 +1,6 @@
 enablePlugins(Antlr4Plugin)
 
-scalaVersion := "3.8.3"
+scalaVersion := "3.9.0"
 
 Antlr4 / antlr4Version := Some("4.13.2")
 Antlr4 / antlr4Output := baseDirectory.value / "target" / "antlr4-generated"
