@@ -1,0 +1,23 @@
+name: Scala Steward
+
+on:
+  schedule:
+    - cron: "0 0 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  scala-steward:
+    runs-on: ubuntu-latest
+    name: Scala Steward
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "corretto"
+      - uses: sbt/setup-sbt@v1
+      - name: Scala Steward
+        uses: scala-steward-org/scala-steward-action@v2
