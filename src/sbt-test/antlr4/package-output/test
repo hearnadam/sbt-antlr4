@@ -1,0 +1,21 @@
+# Package layout: sources land under example/expr/.
+> Antlr4 / antlr4Generate
+$ exists target/antlr4-generated/example/expr/ExprParser.java
+$ absent target/antlr4-generated/ExprParser.java
+> compile
+> run
+
+# Switching to the flat layout must regenerate and remove the old nested files.
+> set Antlr4 / antlr4PackageOutput := false
+> Antlr4 / antlr4Generate
+$ exists target/antlr4-generated/ExprParser.java
+$ absent target/antlr4-generated/example/expr/ExprParser.java
+> compile
+> run
+
+# And back again.
+> set Antlr4 / antlr4PackageOutput := true
+> Antlr4 / antlr4Generate
+$ exists target/antlr4-generated/example/expr/ExprParser.java
+$ absent target/antlr4-generated/ExprParser.java
+> compile
