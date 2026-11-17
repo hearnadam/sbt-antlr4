@@ -74,32 +74,42 @@ object Antlr4Plugin extends AutoPlugin {
       log.debug(s"No .g4 files in $sourceDir — skipping ANTLR4 generation")
       Seq.empty
     } else {
-      val cachedFn = FileFunction.cached(cacheDir) { (_: Set[File]) =>
+      val toolArgs = antlrArgs(
+        classpath = cp,
+        outputDir = antlrOutputDir,
+        packageName = pkg,
+        listener = listener,
+        visitor = visitor,
+        language = language,
+        libDir = libDir,
+        options = options,
+        werror = werror,
+        extra = extra
+      )
+
+      // Regenerate when settings change, not just grammars.
+      val fnCacheDir = cacheDir / "fn"
+      val argsStamp = cacheDir / "args"
+      val prevOutputs = cacheDir / "outputs"
+      val fingerprint = toolArgs.mkString("\n")
+      if (!argsStamp.exists() || IO.read(argsStamp) != fingerprint) IO.delete(fnCacheDir)
+
+      val cachedFn = FileFunction.cached(fnCacheDir) { (_: Set[File]) =>
+        if (prevOutputs.exists()) IO.delete(IO.readLines(prevOutputs).map(new File(_)))
         antlrOutputDir.mkdirs()
-        val exitCode = runAntlr(
-          classpath = cp,
-          srcFiles = grammars,
-          outputDir = antlrOutputDir,
-          packageName = pkg,
-          listener = listener,
-          visitor = visitor,
-          language = language,
-          libDir = libDir,
-          options = options,
-          werror = werror,
-          extra = extra,
-          log = log
-        )
+        val exitCode = runAntlr(toolArgs, grammars, log)
         if (exitCode != 0) sys.error(s"ANTLR4 code generation failed (exit code $exitCode)")
-        (outputDir ** ("*.java" | "*.cs" | "*.py" | "*.js" | "*.ts" | "*.go" | "*.cpp" | "*.h" | "*.swift" | "*.dart")).get().toSet
+        val generated = (outputDir ** ("*.java" | "*.cs" | "*.py" | "*.js" | "*.ts" | "*.go" | "*.cpp" | "*.h" | "*.swift" | "*.dart")).get().toSet
+        IO.writeLines(prevOutputs, generated.toSeq.map(_.getAbsolutePath))
+        IO.write(argsStamp, fingerprint)
+        generated
       }
       cachedFn(grammars).toSeq
     }
   }
 
-  private def runAntlr(
+  private def antlrArgs(
       classpath: Seq[File],
-      srcFiles: Set[File],
       outputDir: File,
       packageName: Option[String],
       listener: Boolean,
@@ -108,9 +118,8 @@ object Antlr4Plugin extends AutoPlugin {
       libDir: Option[File],
       options: Map[String, String],
       werror: Boolean,
-      extra: Seq[String],
-      log: Logger
-  ): Int = {
+      extra: Seq[String]
+  ): Seq[String] = {
     val cpStr = classpath.map(_.getPath).mkString(java.io.File.pathSeparator)
     val args = Vector.newBuilder[String]
     args += "-cp" += cpStr += "org.antlr.v4.Tool"
@@ -124,9 +133,11 @@ object Antlr4Plugin extends AutoPlugin {
     args += (if (visitor) "-visitor" else "-no-visitor")
     if (werror) args += "-Werror"
     extra.foreach(a => args += a)
-    srcFiles.foreach(f => args += f.getPath)
+    args.result()
+  }
 
-    val cmd = args.result()
+  private def runAntlr(toolArgs: Seq[String], srcFiles: Set[File], log: Logger): Int = {
+    val cmd = toolArgs ++ srcFiles.toSeq.sorted.map(_.getPath)
     log.info(s"ANTLR4: java ${cmd.mkString(" ")}")
     Process("java", cmd) ! log
   }
