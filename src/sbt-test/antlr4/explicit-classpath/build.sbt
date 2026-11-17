@@ -1,6 +1,6 @@
 enablePlugins(Antlr4Plugin)
 
-scalaVersion := "3.8.3"
+scalaVersion := "3.9.0"
 
 // Resolve the ANTLR tool jars through a separate ivy config and feed them
 // in via antlr4ToolClasspath — this exercises the explicit-classpath branch
